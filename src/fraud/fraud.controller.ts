@@ -15,4 +15,9 @@ export class FraudController {
   getAllTransactions() {
     return this.fraudService.getAll();
   }
+
+  @Get('analytics')
+  getAnalytics() {
+    return this.fraudService.getAnalytics();
+  }
 }

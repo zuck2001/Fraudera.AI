@@ -11,7 +11,8 @@ export class FraudService {
   ) {}
 
   async analyzeTransaction(transactionData: Partial<Transaction>) {
-    const { amount, merchantId, timestamp } = transactionData;
+    const { amount, merchantId, location, timestamp } = transactionData;
+
     if (!timestamp) {
       throw new Error('Transaction timestamp is required');
     }
@@ -20,44 +21,78 @@ export class FraudService {
     const today = date.toISOString().split('T')[0];
     const month = date.getMonth();
 
-    const allTransactions = await this.transactionRepo.find({
+    const merchantTransactions = await this.transactionRepo.find({
       where: { merchantId },
     });
 
-    const dailyCount = allTransactions.filter(
+    const dailyCount = merchantTransactions.filter(
       (t) => new Date(t.timestamp).toISOString().split('T')[0] === today,
     ).length;
 
-    const monthlyCount = allTransactions.filter(
+    const monthlyCount = merchantTransactions.filter(
       (t) => new Date(t.timestamp).getMonth() === month,
     ).length;
+
+    const avgAmount =
+      merchantTransactions.length > 0
+        ? merchantTransactions.reduce((sum, t) => sum + t.amount, 0) /
+          merchantTransactions.length
+        : 0;
+
+    const hour = date.getUTCHours();
+    const isNightTransaction = hour >= 0 && hour < 6;
+
+    const lastLocation =
+      merchantTransactions.length > 0
+        ? merchantTransactions[merchantTransactions.length - 1].location
+        : null;
 
     const MAX_DAILY_TX = 20;
     const MAX_MONTHLY_TX = 100;
     const MAX_AMOUNT = 5000;
 
-    let risk = 'low';
-    let reason = 'Normal transaction';
     let riskScore = 0.1;
+    let reason = 'Normal transaction';
 
     if (typeof amount === 'number' && amount > MAX_AMOUNT) {
-      risk = 'high';
-      reason = 'Transaction amount exceeds threshold';
-      riskScore = 0.9;
-    } else if (dailyCount > MAX_DAILY_TX) {
-      risk = 'high';
-      reason = 'Too many transactions today';
-      riskScore = 0.8;
-    } else if (monthlyCount > MAX_MONTHLY_TX) {
-      risk = 'medium';
-      reason = 'Unusual monthly transaction volume';
-      riskScore = 0.6;
+      riskScore += 0.6;
+      reason = 'High transaction amount';
     }
 
-    const status = risk === 'high' ? 'declined' : 'approved';
+    if (dailyCount > MAX_DAILY_TX) {
+      riskScore += 0.2;
+      reason = 'Too many daily transactions';
+    }
+
+    if (monthlyCount > MAX_MONTHLY_TX) {
+      riskScore += 0.2;
+      reason = 'Unusual monthly transaction volume';
+    }
+
+    if (avgAmount && typeof amount === 'number' && amount > avgAmount * 2) {
+      riskScore += 0.3;
+      reason = 'Amount is higher than merchant’s average';
+    }
+
+    if (isNightTransaction) {
+      riskScore += 0.2;
+      reason = 'Suspicious night transaction';
+    }
+
+    if (lastLocation && lastLocation !== location) {
+      riskScore += 0.2;
+      reason = 'Transaction from unusual location';
+    }
+
+    riskScore = Math.min(riskScore, 1);
+
+    const status = riskScore > 0.7 ? 'declined' : 'approved';
 
     const transaction = this.transactionRepo.create({
       ...transactionData,
+      avgAmount,
+      lastLocation,
+      isNightTransaction,
       riskScore,
       status,
     });
@@ -70,10 +105,56 @@ export class FraudService {
       reason,
       dailyCount,
       monthlyCount,
+      avgAmount,
+      isNightTransaction,
+      lastLocation,
     };
   }
 
   async getAll() {
     return this.transactionRepo.find();
+  }
+
+  async getAnalytics() {
+    const all = await this.transactionRepo.find();
+    const total = all.length;
+    if (total === 0) {
+      return {
+        total: 0,
+        declined: 0,
+        avgRisk: 0,
+        uniqueMerchants: 0,
+        topMerchants: [],
+        highRiskLast7DaysPercent: 0,
+      };
+    }
+    const declined = all.filter((t) => t.status === 'declined').length;
+    const avgRisk = all.reduce((sum, t) => sum + (t.riskScore || 0), 0) / total;
+    const merchantsMap = new Map<string, number>();
+    all.forEach((t) => {
+      merchantsMap.set(t.merchantId, (merchantsMap.get(t.merchantId) || 0) + 1);
+    });
+    const uniqueMerchants = merchantsMap.size;
+    const topMerchants = Array.from(merchantsMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([merchantId, count]) => ({ merchantId, count }));
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentTx = all.filter((t) => new Date(t.timestamp) >= sevenDaysAgo);
+    const highRiskLast7Days = recentTx.filter(
+      (t) => (t.riskScore || 0) > 0.7,
+    ).length;
+    const highRiskLast7DaysPercent = recentTx.length
+      ? (highRiskLast7Days / recentTx.length) * 100
+      : 0;
+    return {
+      total,
+      declined,
+      avgRisk: parseFloat(avgRisk.toFixed(2)),
+      uniqueMerchants,
+      topMerchants,
+      highRiskLast7DaysPercent: highRiskLast7DaysPercent.toFixed(1),
+    };
   }
 }

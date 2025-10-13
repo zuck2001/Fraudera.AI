@@ -34,6 +34,15 @@ export class Transaction {
   @Column({ type: 'float', nullable: true })
   riskScore: number;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'float', nullable: true, default: 0 })
+  avgAmount: number;
+
+  @Column({ type: 'varchar', nullable: true })
+  lastLocation: string | null;
+
+  @Column({ default: false })
+  isNightTransaction: boolean;
+
+  @Column({ default: 'approved', type: 'varchar', length: 20, nullable: true })
   status: string;
 }
