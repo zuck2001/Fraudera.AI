@@ -6,31 +6,27 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('stats')
-  getStats(
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
+  getStats(@Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
     return this.dashboardService.getStats(startDate, endDate);
   }
 
   @Get('top-merchants')
-  getTopMerchants(
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
+  getTopMerchants(@Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
     return this.dashboardService.getTopMerchants(startDate, endDate);
   }
 
   @Get('risk-breakdown')
-  getRiskBreakdown(
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
+  getRiskBreakdown(@Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
     return this.dashboardService.getRiskBreakdown(startDate, endDate);
   }
 
   @Get('recent')
-  getRecent(@Query('limit') limit = 10) {
-    return this.dashboardService.getRecentTransactions(Number(limit));
+  getRecentTransactions() {
+    return this.dashboardService.getRecentTransactions();
+  }
+
+  @Get('by-country')
+  getByCountry(@Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    return this.dashboardService.getByCountry(startDate, endDate);
   }
 }

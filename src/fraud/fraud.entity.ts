@@ -45,4 +45,22 @@ export class Transaction {
 
   @Column({ default: 'approved', type: 'varchar', length: 20, nullable: true })
   status: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  country: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  nationalId: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  passportNumber: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  commercialRegister: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  taxCardNumber: string | null;
+
+  @Column({ type: 'varchar', length: 20, default: 'pending', nullable: true })
+  documentStatus: 'pending' | 'verified' | 'fake' | null;
 }

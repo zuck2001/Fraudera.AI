@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transaction } from './fraud.entity';
 
 @Injectable()
 export class FraudService {
+  getDocumentsFiltered() {
+    throw new Error('Method not implemented.');
+  }
+
   constructor(
     @InjectRepository(Transaction)
     private transactionRepo: Repository<Transaction>,
@@ -35,8 +39,7 @@ export class FraudService {
 
     const avgAmount =
       merchantTransactions.length > 0
-        ? merchantTransactions.reduce((sum, t) => sum + t.amount, 0) /
-          merchantTransactions.length
+        ? merchantTransactions.reduce((sum, t) => sum + t.amount, 0) / merchantTransactions.length
         : 0;
 
     const hour = date.getUTCHours();
@@ -71,7 +74,7 @@ export class FraudService {
 
     if (avgAmount && typeof amount === 'number' && amount > avgAmount * 2) {
       riskScore += 0.3;
-      reason = 'Amount is higher than merchant’s average';
+      reason = 'Amount is higher than merchants average';
     }
 
     if (isNightTransaction) {
@@ -95,6 +98,7 @@ export class FraudService {
       isNightTransaction,
       riskScore,
       status,
+      country: transactionData.country || 'Unknown',
     });
 
     await this.transactionRepo.save(transaction);
@@ -112,7 +116,11 @@ export class FraudService {
   }
 
   async getAll() {
-    return this.transactionRepo.find();
+    const transactions = await this.transactionRepo.find();
+    return transactions.map((t) => ({
+      ...t,
+      riskScore: typeof t.riskScore === 'number' && !isNaN(t.riskScore) ? t.riskScore : 0,
+    }));
   }
 
   async getAnalytics() {
@@ -142,9 +150,8 @@ export class FraudService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const recentTx = all.filter((t) => new Date(t.timestamp) >= sevenDaysAgo);
-    const highRiskLast7Days = recentTx.filter(
-      (t) => (t.riskScore || 0) > 0.7,
-    ).length;
+    const highRiskLast7Days = recentTx.filter((t) => (t.riskScore || 0) > 0.7).length;
+
     const highRiskLast7DaysPercent = recentTx.length
       ? (highRiskLast7Days / recentTx.length) * 100
       : 0;
@@ -156,5 +163,29 @@ export class FraudService {
       topMerchants,
       highRiskLast7DaysPercent: highRiskLast7DaysPercent.toFixed(1),
     };
+  }
+
+  // ✅ Fixed version (removed unnecessary async)
+  verifyDocumentData(data: {
+    id?: number;
+    nationalId?: string;
+    passportNumber?: string;
+    commercialRegister?: string;
+    taxCardNumber?: string;
+  }): { result: 'verified' | 'fake' } {
+    try {
+      const hasValidId =
+        (data.nationalId && data.nationalId.length > 5) ||
+        (data.passportNumber && data.passportNumber.length > 5) ||
+        (data.commercialRegister && data.commercialRegister.length > 5) ||
+        (data.taxCardNumber && data.taxCardNumber.length > 5);
+
+      const result: 'verified' | 'fake' = hasValidId ? 'verified' : 'fake';
+      return { result };
+    } catch (error: unknown) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Document verification failed',
+      );
+    }
   }
 }

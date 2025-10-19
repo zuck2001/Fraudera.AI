@@ -15,10 +15,11 @@
     "outDir": "./dist",
     "ignoreDeprecations": "5.0",
     "incremental": true,
+    "noImplicitAny": false,
     "skipLibCheck": true,
+    "strict": false,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   }
